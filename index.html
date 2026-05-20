@@ -34,7 +34,8 @@
         <div style="margin-bottom: 15px;">
             <button id="btn-ts" class="btn-action" onclick="switchView2('ts')" style="background: #4169E1;">Series de Tiempo</button>
             <button id="btn-hm" class="btn-action" onclick="switchView2('heatmap')" style="background: #64748b;">Mapa de Calor (Grado de relación)</button>
-        <button id="btn-bp" class="btn-action" onclick="switchView2('boxplot')" style="background: #64748b;">Límites de referencia (Diagramas de caja)</button>
+            <button id="btn-bp" class="btn-action" onclick="switchView2('boxplot')" style="background: #64748b;">Límites de referencia (Diagramas de caja)</button>
+            <button id="btn-pib" class="btn-action" onclick="switchView2('pib')" style="background: #64748b;">PIB</button>
         </div>
 
         <div id="view-ts">
@@ -48,12 +49,23 @@
             <p><small>Ejemplo de interpretación: la tasa de referencia de banxico y los CETES se relacionan <b>directamente</b> con 1, cuando la tasa de referencia es alta se espera que el valor de los CETES incremente</b>.</small></p>
             <div id="heatmap-chart" style="height: 500px; width: 100%;"></div>
         </div>
+
         <div id="view-boxplot" style="display: none;">
             <p><small>Los diagramas de caja ayudan a "encerrar" el comportamiento real de <b>una distribución de datos</b>.</small></p>
             <p><small>Permiten visualizar los valores o límites para <b>identificar cambios bruscos en los datos</b> (Q1-Q3).</small></p>
             <p><small>El punto amarillo representa <b>el valor más reciente o el último dato recolectado</b>. Si el punto cae dentro de la caja se interpreta que varía en un rango de economía estable, de lo contrario se puede considerar condiciones de crisis económicas.</small></p>
             <div id="boxplot-chart" style="height: 500px; width: 100%;"></div>
         </div>
+
+        <div id="view-pib" style="display: none;">
+            <p>Crecimiento del PIB de México (% Anual)</p>
+            <p><small>Años con crecimiento positivo en <b>Azul</b> | Años con recesión en <b>Gris</b>.</small></p>
+            <div id="pib-chart" style="height: 500px; width: 100%;"></div>
+            <p style="text-align: right; font-size: 0.8rem; color: #64748b; margin-top: 10px;">
+                Fuente: <a href="https://datos.bancomundial.org/indicador/NY.GDP.MKTP.KD.ZG?locations=MX" target="_blank" style="color: #4169E1; text-decoration: none; font-weight: 600;">Grupo Banco Mundial</a>
+            </p>
+        </div>
+
         <p style="text-align: right; font-size: 0.8rem; color: #64748b; margin-top: 10px;">
             Fuente: <a href="https://www.banxico.org.mx/SieAPIRest/service/v1" target="_blank" style="color: #4169E1; text-decoration: none; font-weight: 600;">API Banxico</a>
         </p>
@@ -69,7 +81,6 @@
                 <div><label>Cluster 3 (Volatilidad del peso mexicano)</label><input type="color" id="c3" value="#FFFF00"></div>
                 <div><label>Cluster 4 (Niveles más bajos de inflación)</label><input type="color" id="c4" value="#006400"></div>
             </div>
-            <!-- <button class="btn-action" onclick="refreshUI()">Actualizar colores</button> -->
         </div>
         <h3>3. Reducción de dimensionalidad con PCA (Inspección de variación multivariable)</h3>
         <p><small>El <b>PCA</b> es un modelo que ayuda a representar multiples variables (+5) en <b>2 o 3 dimensiones</b> | Ayuda a crear nubes de datos que permiten comprender el comportamiento del objeto de estudio.</small></p>
@@ -100,6 +111,20 @@
         const pcaChart = echarts.init(document.getElementById('pca-chart'));
         const heatmapChart = echarts.init(document.getElementById('heatmap-chart'));
         const boxplotChart = echarts.init(document.getElementById('boxplot-chart'));
+        const pibChart = echarts.init(document.getElementById('pib-chart'));
+
+        const pibYears = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+
+        const pibValues = [5.25, 3.98, 3.57, 2.87, 4.39, -5.91, 6.22, 7.20, 6.19, 2.76, 5.03, -0.45, -0.24, 1.19, 3.57, 2.11, 4.80, 2.07, 0.94, -6.29, 4.97, 3.44, 3.55, 0.85, 2.50, 2.70, 1.77, 1.87, 1.97, -0.19, -8.62, 5.74, 3.95, 3.23, 2.10, 0.30, 1.1];
+
+        const coloredPibData = pibValues.map((value, index) => {
+            return {
+                value: value,
+                itemStyle: {
+                    color: value > 0 ? '#5470C6' : '#AAAAAA' 
+                }
+            };
+        });
 
         const glossary = [
             ["Peso Mexicano", "Régimen de tipo de cambio flexible que responde a la oferta y demanda del peso/dólar.", "Presión de flujo en la cabeza del pozo económico."],
@@ -111,13 +136,10 @@
             ["MME", "Precio promedio de exportación de las mezclas de crudo mexicano. A mayor costo de la mezcla, mayor costo de transporte y canasta básica.", "Calidad del yacimiento (API) que sustenta el flujo de ingresos nacional."]
         ];
 
-        // Nombres cortos para los ejes del heatmap
         const hmFeatures = ['Peso', 'UDI', 'MME', 'CETES', 'Inflación', 'Subyacente', 'Tasa Ref'];
 
-        // Matriz de Pearson (calculada desde tu dataset banxico-timesries.xlsx)
         const pearsonData = [[0, 0, 1.0], [1, 0, 0.91], [2, 0, 0.36], [3, 0, -0.55], [4, 0, -0.55], [5, 0, -0.56], [6, 0, -0.5], [0, 1, 0.91], [1, 1, 1.0], [2, 1, 0.55], [3, 1, -0.53], [4, 1, -0.56], [5, 1, -0.56], [6, 1, -0.55], [0, 2, 0.36], [1, 2, 0.55], [2, 2, 1.0], [3, 2, -0.55], [4, 2, -0.46], [5, 2, -0.47], [6, 2, -0.56], [0, 3, -0.55], [1, 3, -0.53], [2, 3, -0.55], [3, 3, 1.0], [4, 3, 0.85], [5, 3, 0.86], [6, 3, 1.0], [0, 4, -0.55], [1, 4, -0.56], [2, 4, -0.46], [3, 4, 0.85], [4, 4, 1.0], [5, 4, 1.0], [6, 4, 0.85], [0, 5, -0.56], [1, 5, -0.56], [2, 5, -0.47], [3, 5, 0.86], [4, 5, 1.0], [5, 5, 1.0], [6, 5, 0.85], [0, 6, -0.5], [1, 6, -0.55], [2, 6, -0.56], [3, 6, 1.0], [4, 6, 0.85], [5, 6, 0.85], [6, 6, 1.0]];
 
-        // Boxplot data
         const bpFeatures = ['Peso Mexicano (mxn)', 'UDI (mxn)', 'MME (dólar)', 'CETES (%)', 'Inflación anual Banxico (%)', 'Inflación anual subyacente Banxico (%)', 'Tasa de referencia Banxico (%)'];
         const bpColors = ['#4169E1', '#9333ea', '#f59e0b', '#fbbf24', '#000000', '#6366f1', '#10b981'];
 
@@ -280,17 +302,15 @@
                 yAxis: { type: 'category', data: hmFeatures, splitArea: { show: true } },
                 visualMap: {
                     min: -1, max: 1, calculable: true, orient: 'horizontal', left: 'center', bottom: '0%',
-                    // color: ['#8B0000', '#FFA500', '#FFFFFF', '#90EE90', '#006400'] // Escala de rojo (negativo) a verde (positivo)
                     color: ['#006400', '#90EE90', '#FFFFFF', '#FFA500', '#8B0000']
                 },
                 series: [{
                     name: 'Pearson', type: 'heatmap', data: pearsonData,
-                    label: { show: true }, // Muestra el número dentro del cuadro
+                    label: { show: true },
                     emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
                 }]
             });
 
-            // 3. Renderizado del Gráfico con las 3 capas
             boxplotChart.setOption({
                 title: { text: 'Distribución Histórica y Estado Actual', left: 'center' },
                 tooltip: { trigger: 'item' },
@@ -299,26 +319,23 @@
                 yAxis: { type: 'value', name: 'Magnitud (Escala Lineal)' },
                 series: [
                     {
-                        // Capa 1: Cajas y Bigotes
                         name: 'Distribución (Boxplot)',
                         type: 'boxplot',
                         data: dynamicBoxplotData,
                         tooltip: { formatter: (p) => `<b>${p.name}</b><br/>Max: ${p.data.value[5].toFixed(2)}<br/>Q3: ${p.data.value[4].toFixed(2)}<br/>Mediana: ${p.data.value[3].toFixed(2)}<br/>Q1: ${p.data.value[2].toFixed(2)}<br/>Min: ${p.data.value[1].toFixed(2)}` }
                     },
                     {
-                        // Capa 2: Valores Atípicos (Outliers)
                         name: 'Valores Atípicos',
                         type: 'scatter',
                         data: outliersData,
                         symbolSize: 6,
-                        itemStyle: { color: '#ef4444', opacity: 0.6 }, // Puntos rojos semi-transparentes
+                        itemStyle: { color: '#ef4444', opacity: 0.6 },
                         tooltip: { formatter: (p) => `<div style="text-align: center;"><b style="color: #ef4444;">Dato Atípico</b><br/><b>Valor:</b> ${p.data[1].toFixed(2)}</div>` }
                     },
                     {
-                        // Capa 3: El último dato registrado (Punto Amarillo)
                         name: 'Último Dato Registrado',
                         type: 'scatter',
-                        data: lastPointData, // Tu variable original sigue intacta
+                        data: lastPointData,
                         symbolSize: 14,
                         itemStyle: { color: '#FFFF00', borderColor: '#000000', borderWidth: 2 }, 
                         z: 10, 
@@ -333,9 +350,49 @@
                         }
                     }
                 ]
-            }, true); // El true asegura que se sobrescriba cualquier configuración vieja
+            }, true);
 
-            // PCA Scatter Plot
+            pibChart.setOption({
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                        const data = params[0];
+                        const marker = data.data.value > 0 ? '🟢' : '🔴';
+                        return `<b>${data.name}</b><br/>${marker} PIB: ${data.data.value}%`;
+                    }
+                },
+                grid: { left: '5%', right: '5%', bottom: '10%' },
+                xAxis: {
+                    type: 'category',
+                    data: pibYears,
+                    axisTick: { alignWithLabel: true }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: 'Crecimiento (%)',
+                    splitLine: { lineStyle: { type: 'dashed' } }
+                },
+                dataZoom: [
+                    {type: "inside", xAxisIndex: [0], start: 75, end: 100},
+                    {type: "slider", xAxisIndex: [0], bottom: 20, start: 75, end: 100}
+                ],
+                series: [
+                    {
+                        name: 'PIB México',
+                        type: 'bar',
+                        data: coloredPibData,
+                        label: {
+                            show: true,
+                            position: 'top',
+                            formatter: (p) => p.value > 0 ? p.value : '',
+                            fontSize: 10,
+                            color: '#1e293b'
+                        }
+                    }
+                ]
+            }, true);
+
             const clusterColors = [
                 document.getElementById('c0').value, // #90EE90
                 document.getElementById('c1').value, // #8B0000
@@ -353,8 +410,6 @@
             ];
 
             const seriesPCA = [];
-
-            // 1. Series históricas: Asignamos el estilo A NIVEL SERIE
             for (let c = 0; c < 5; c++) {
                 const clusterData = data.pca_data
                     .filter(p => p[3] === c && p[4] === 0)
@@ -370,7 +425,6 @@
                     name: legendNames[c],
                     type: is3D ? 'scatter3D' : 'scatter',
                     data: clusterData,
-                    // EL AJUSTE: El color va aquí para que la leyenda lo lea
                     itemStyle: { 
                         color: clusterColors[c], 
                         opacity: 0.8,
@@ -380,7 +434,6 @@
                 });
             }
 
-            // 2. Serie de Últimos 6 Meses con el color #4287f5
             const recentData = data.pca_data
                 .filter(p => p[4] === 1)
                 .map(p => ({
@@ -395,7 +448,6 @@
                 name: 'Últimos 6 Meses',
                 type: is3D ? 'scatter3D' : 'scatter',
                 data: recentData,
-                // EL AJUSTE: El color azul va aquí
                 itemStyle: { 
                     color: '#4287f5', 
                     opacity: 1,
@@ -404,9 +456,7 @@
                 }
             });
 
-            // 3. Renderizado final forzando la paleta de colores global
             pcaChart.setOption({
-                // Forzamos la paleta de colores global para que la leyenda sea exacta
                 color: [...clusterColors, '#4287f5'],
                 legend: {
                     show: true,
@@ -436,11 +486,11 @@
                         </div>`;
                     }
                 },
-                xAxis: is3D ? null : { type: 'value', name: 'PC1' },
-                yAxis: is3D ? null : { type: 'value', name: 'PC2' },
-                xAxis3D: is3D ? { type: 'value', name: 'PC1' } : null,
-                yAxis3D: is3D ? { type: 'value', name: 'PC2' } : null,
-                zAxis3D: is3D ? { type: 'value', name: 'PC3' } : null,
+                xAxis: is3D ? null : { type: 'value', name: 'Variación multivariable\n eje X' },
+                yAxis: is3D ? null : { type: 'value', name: 'Variación multivariable\n eje Y' },
+                xAxis3D: is3D ? { type: 'value', name: 'Variación multivariable\n eje X' } : null,
+                yAxis3D: is3D ? { type: 'value', name: 'Variación multivariable\n eje Y' } : null,
+                zAxis3D: is3D ? { type: 'value', name: 'Variación multivariable\n eje Z' } : null,
                 grid3D: is3D ? { viewControl: { autoRotate: true } } : null,
                 series: seriesPCA
             }, true);
@@ -452,10 +502,12 @@
             document.getElementById('view-ts').style.display = 'none';
             document.getElementById('view-heatmap').style.display = 'none';
             if (document.getElementById('view-boxplot')) document.getElementById('view-boxplot').style.display = 'none';
+            if (document.getElementById('view-pib')) document.getElementById('view-pib').style.display = 'none';
 
             document.getElementById('btn-ts').style.background = '#64748b';
             document.getElementById('btn-hm').style.background = '#64748b';
             if (document.getElementById('btn-bp')) document.getElementById('btn-bp').style.background = '#64748b';
+            if (document.getElementById('btn-pib')) document.getElementById('btn-pib').style.background = '#64748b';
 
             if (view === 'ts') {
                 document.getElementById('view-ts').style.display = 'block';
@@ -469,18 +521,20 @@
                 document.getElementById('view-boxplot').style.display = 'block';
                 document.getElementById('btn-bp').style.background = '#4169E1';
                 if(typeof boxplotChart !== 'undefined') boxplotChart.resize(); 
+            } else if (view === 'pib') {
+                document.getElementById('view-pib').style.display = 'block';
+                document.getElementById('btn-pib').style.background = '#4169E1';
+                if(typeof pibChart !== 'undefined') pibChart.resize(); 
             }
         }
 
-        // Render Glossary
         const glossaryBody = document.getElementById('glossary-content');
         glossary.forEach(item => {
             glossaryBody.innerHTML += `<tr><td class="highlight-text">${item[0]}</td><td>${item[1]}</td><td>${item[2]}</td></tr>`;
         });
 
         refreshUI();
-        // <!--window.onresize = () => { tsChart.resize(); pcaChart.resize(); };-->
-        window.onresize = function() {tsChart.resize(); pcaChart.resize(); heatmapChart.resize(); boxplotChart.resize();};
+        window.onresize = function() {tsChart.resize(); pcaChart.resize(); heatmapChart.resize(); boxplotChart.resize(); pibChart.resize()};
     </script>
 </body>
 </html>
